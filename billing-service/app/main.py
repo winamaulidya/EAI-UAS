@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import logging
 from typing import List
 from datetime import datetime
@@ -7,6 +8,7 @@ from datetime import datetime
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import OperationalError
 
 from app import models, schemas, database, producer
 
@@ -16,7 +18,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-models.Base.metadata.create_all(bind=database.engine)
+MAX_DB_RETRIES = 30
+DB_RETRY_DELAY = 2
+for attempt in range(1, MAX_DB_RETRIES + 1):
+    try:
+        models.Base.metadata.create_all(bind=database.engine)
+        logger.info("Database tables created successfully")
+        break
+    except OperationalError as e:
+        logger.warning(f"Database not ready (attempt {attempt}/{MAX_DB_RETRIES}): {e}")
+        if attempt == MAX_DB_RETRIES:
+            logger.error("Max retries reached. Could not connect to database.")
+            raise
+        time.sleep(DB_RETRY_DELAY)
 
 app = FastAPI(
     title="Billing Service",

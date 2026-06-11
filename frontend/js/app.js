@@ -56,15 +56,27 @@ updateClock();
 
 // === API HELPER ===
 async function api(method, path, body = null) {
-    const opts = {
-        method,
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    };
-    if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(BASE + path, opts);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || (Array.isArray(data.detail) ? data.detail.map(d => d.msg).join(', ') : 'Request failed'));
-    return data;
+    try {
+        const opts = {
+            method,
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        };
+        if (body) opts.body = JSON.stringify(body);
+        const res = await fetch(BASE + path, opts);
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            const text = await res.text();
+            throw new Error(`Server returned ${res.status}: ${text.substring(0, 120)}`);
+        }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || (Array.isArray(data.detail) ? data.detail.map(d => d.msg).join(', ') : 'Request failed'));
+        return data;
+    } catch (err) {
+        if (err instanceof TypeError && err.message === 'Failed to fetch') {
+            throw new Error('Gagal terhubung ke server. Pastikan server (Docker) sedang berjalan.');
+        }
+        throw err;
+    }
 }
 
 // === DASHBOARD ===
